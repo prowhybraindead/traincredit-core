@@ -1,37 +1,56 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebaseAdmin';
 
-export async function POST(req: NextRequest) {
-    const apiKey = req.headers.get('x-api-key');
+export const dynamic = 'force-dynamic';
 
-    // 1. Secure API Key Check
-    if (apiKey !== process.env.ADMIN_SECRET) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+const getCorsHeaders = () => ({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key',
+});
 
+export async function OPTIONS() {
+    return NextResponse.json({}, { headers: getCorsHeaders() });
+}
+
+export async function POST(req: Request) {
     try {
-        const body = await req.json();
-        const { amount, description, merchantId } = body;
+        const apiKey = req.headers.get('x-api-key');
 
-        // 2. Create Payment Intent / Transaction Record
-        const docRef = await db.collection('transactions').add({
-            type: 'PAYMENT',
-            amount,
+        if (apiKey !== process.env.ADMIN_SECRET) {
+            return NextResponse.json({ error: 'Unauthorized: Invalid API Key' }, { status: 401, headers: getCorsHeaders() });
+        }
+
+        const body = await req.json();
+        const { amount, currency = 'USD', description = 'Payment' } = body;
+
+        if (!amount || amount <= 0) {
+            return NextResponse.json({ error: 'Invalid amount' }, { status: 400, headers: getCorsHeaders() });
+        }
+
+        const transactionRef = db.collection('transactions').doc();
+        const transactionData = {
+            id: transactionRef.id,
+            amount: parseFloat(amount),
+            currency,
             description,
-            merchantId,
             status: 'pending',
-            timestamp: new Date(),
-            participants: [merchantId] // Later add payer
-        });
+            createdAt: new Date().toISOString(),
+            type: 'PAYMENT_GATEWAY',
+        };
+
+        await transactionRef.set(transactionData);
+
+        const checkoutUrl = `${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/pay/${transactionRef.id}`;
 
         return NextResponse.json({
-            success: true,
-            transactionId: docRef.id,
-            // Netlify provides 'URL' env var. Fallback to localhost.
-            checkoutUrl: `${process.env.NEXT_PUBLIC_URL || process.env.URL || 'http://localhost:3000'}/pay/${docRef.id}`
-        });
+            status: 'success',
+            checkoutUrl,
+            transactionId: transactionRef.id,
+        }, { headers: getCorsHeaders() });
 
-    } catch (e: unknown) {
-        return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+        console.error('Transaction API Error:', error);
+        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500, headers: getCorsHeaders() });
     }
 }
