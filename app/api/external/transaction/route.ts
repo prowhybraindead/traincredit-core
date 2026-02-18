@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
             success: true,
             transactionId: docRef.id,
-            checkoutUrl: `${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/pay/${docRef.id}`
+            // Netlify provides 'URL' env var. Fallback to localhost.
+            checkoutUrl: `${process.env.NEXT_PUBLIC_URL || process.env.URL || 'http://localhost:3000'}/pay/${docRef.id}`
         });
 
     } catch (e: unknown) {
