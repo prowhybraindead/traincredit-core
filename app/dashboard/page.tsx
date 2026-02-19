@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
 import { clientDb } from '@/lib/firebaseClient';
+import PlanSelector from '../../components/PlanSelector';
+import { PlanType } from '../../src/config/plans';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
     Activity, Users, DollarSign, CreditCard,
-    ArrowUpRight, ArrowDownRight, Search, Bell
+    ArrowUpRight, ArrowDownRight, Search, Bell, Zap
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -21,6 +23,28 @@ export default function Dashboard() {
         avgLatency: 45
     });
     const [loading, setLoading] = useState(true);
+    const [showPlans, setShowPlans] = useState(false);
+    const [currentPlan, setCurrentPlan] = useState<PlanType>('FREE');
+    const merchantId = 'demo_merchant_1'; // Simulated logged-in merchant
+
+    useEffect(() => {
+        // Fetch/Init Merchant Profile
+        const fetchProfile = async () => {
+            const ref = doc(clientDb, 'merchants', merchantId);
+            const snap = await getDoc(ref);
+            if (snap.exists()) {
+                setCurrentPlan(snap.data().currentPlan as PlanType || 'FREE');
+            } else {
+                // Init demo merchant
+                await setDoc(ref, {
+                    email: 'merchant@traincredit.com',
+                    currentPlan: 'FREE',
+                    createdAt: new Date()
+                });
+            }
+        };
+        fetchProfile();
+    }, []);
 
     useEffect(() => {
         // Real-time listener for recent transactions
@@ -100,6 +124,14 @@ export default function Dashboard() {
                         <p className="text-slate-500 text-sm">Real-time platform overview</p>
                     </div>
                     <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => setShowPlans(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20"
+                        >
+                            <Zap className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                            <span className="text-sm font-bold">Upgrade Plan</span>
+                        </button>
+
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <input
@@ -115,6 +147,16 @@ export default function Dashboard() {
                         <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full" />
                     </div>
                 </header>
+
+                {showPlans && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+                        <PlanSelector
+                            currentPlanId={currentPlan}
+                            merchantId={merchantId}
+                            onClose={() => setShowPlans(false)}
+                        />
+                    </div>
+                )}
 
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

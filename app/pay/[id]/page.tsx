@@ -2,17 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { clientDb } from '@/lib/firebaseClient';
-import { Loader2, CheckCircle, XCircle, ShieldCheck, Clock } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, ShieldCheck, Clock, QrCode, CreditCard, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function PaymentPage() {
     const { id } = useParams() as { id: string };
     const [transaction, setTransaction] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
     const [loading, setLoading] = useState(true);
     const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
-    const [processing, setProcessing] = useState(false);
     const [status, setStatus] = useState<'pending' | 'completed' | 'failed' | 'expired'>('pending');
+
+    // Payment UI State
+    const [activeTab, setActiveTab] = useState<'QR' | 'CARD'>('QR');
+    const [cardDetails, setCardDetails] = useState({ number: '', expiry: '', cvv: '' });
+    const [processing, setProcessing] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -34,43 +39,51 @@ export default function PaymentPage() {
         if (status !== 'pending') return;
         const timer = setInterval(() => {
             setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    handleExpire();
-                    return 0;
-                }
+                if (prev <= 1) return 0; // Handle expiry logic elsewhere if needed
                 return prev - 1;
             });
         }, 1000);
         return () => clearInterval(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status]);
 
-    const handleExpire = async () => {
-        setStatus('expired');
-        try {
-            await updateDoc(doc(clientDb, 'transactions', id), { status: 'expired' });
-        } catch (e) { console.error(e); }
-    };
+    const handleCardPayment = async () => {
+        if (!cardDetails.number || !cardDetails.expiry || !cardDetails.cvv) {
+            toast.error("Please fill in all card details");
+            return;
+        }
 
-    const handlePayment = async (success: boolean) => {
         setProcessing(true);
-        // Simulate network delay for realism
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
         try {
-            await updateDoc(doc(clientDb, 'transactions', id), {
-                status: success ? 'completed' : 'failed',
-                processedAt: new Date().toISOString()
+            const res = await fetch('/api/pay', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    transactionId: id,
+                    cardNumber: cardDetails.number.replace(/\s/g, ''),
+                    expiry: cardDetails.expiry,
+                    cvv: cardDetails.cvv
+                })
             });
-            // The onSnapshot listener will update the local state automatically
-        } catch (error) {
-            console.error('Payment failed', error);
-            alert('Payment processing error');
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Payment Failed');
+
+            toast.success("Payment Successful!");
+            // Status will update via Firestore listener
+        } catch (error: any) {
+            console.error(error);
+            toast.error(error.message);
         } finally {
             setProcessing(false);
         }
     };
+
+    const qrPayload = transaction ? JSON.stringify({
+        type: 'PAYMENT',
+        trId: id,
+        amount: transaction.amount,
+        merchantName: transaction.type === 'SUBSCRIPTION_FEE' ? 'TrainCredit Inc.' : 'Merchant'
+    }) : '';
 
     const formatTime = (seconds: number) => {
         const m = Math.floor(seconds / 60);
@@ -103,35 +116,21 @@ export default function PaymentPage() {
                     </div>
                 </div>
                 <button
-                    onClick={() => window.close()}
+                    onClick={() => window.close()} // Ideally redirect back to dashboard
                     className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-500/20"
                 >
-                    Close Window
+                    Return to Dashboard
                 </button>
             </div>
         </div>
     );
 
-    if (status === 'expired' || status === 'failed') return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-6">
-            <div className="bg-white p-8 rounded-3xl shadow-xl text-center max-w-md w-full animate-in zoom-in duration-300">
-                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <XCircle className="w-10 h-10 text-red-500" />
-                </div>
-                <h1 className="text-2xl font-black text-slate-900 mb-2">
-                    {status === 'expired' ? 'Session Expired' : 'Payment Failed'}
-                </h1>
-                <p className="text-slate-500 mb-6">
-                    {status === 'expired'
-                        ? 'This payment session has timed out due to inactivity.'
-                        : 'The transaction could not be processed.'}
-                </p>
-                <button
-                    onClick={() => window.close()}
-                    className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl"
-                >
-                    Close Window
-                </button>
+    if (status === 'failed' || status === 'expired') return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-red-50/50 p-6">
+            <div className="text-center">
+                <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+                <h1 className="text-2xl font-bold text-slate-900">Payment Failed</h1>
+                <p className="text-slate-500 mt-2">The transaction could not be completed.</p>
             </div>
         </div>
     );
@@ -143,7 +142,7 @@ export default function PaymentPage() {
                 <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <ShieldCheck className="w-6 h-6 text-emerald-400" />
-                        <span className="font-bold tracking-wide">TrainCredit Secure</span>
+                        <span className="font-bold tracking-wide">TrainPay</span>
                     </div>
                     <div className="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full text-xs font-mono">
                         <Clock className="w-3 h-3" />
@@ -159,39 +158,102 @@ export default function PaymentPage() {
                         <p className="text-sm text-slate-500 mt-2">{transaction?.description}</p>
                     </div>
 
-                    {/* Payment Methods */}
-                    <div className="space-y-3 mb-8">
+                    {/* Tabs */}
+                    <div className="flex p-1 bg-slate-100 rounded-xl mb-8">
                         <button
-                            disabled={processing}
-                            onClick={() => handlePayment(true)}
-                            className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
+                            onClick={() => setActiveTab('QR')}
+                            className={`flex-1 py-2 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'QR' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                                }`}
                         >
-                            {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirm Payment'}
+                            <QrCode className="w-4 h-4" /> Scan QR
                         </button>
                         <button
-                            disabled={processing}
-                            onClick={() => handlePayment(false)}
-                            className="w-full py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl transition-colors disabled:opacity-50"
+                            onClick={() => setActiveTab('CARD')}
+                            className={`flex-1 py-2 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'CARD' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                                }`}
                         >
-                            Cancel Transaction
+                            <CreditCard className="w-4 h-4" /> Pay with Card
                         </button>
                     </div>
+
+                    {/* QR Code Tab */}
+                    {activeTab === 'QR' && (
+                        <div className="bg-white border-2 border-slate-100 rounded-2xl p-6 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2">
+                            <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm mb-4">
+                                <img
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrPayload)}`}
+                                    alt="Payment QR"
+                                    className="w-48 h-48 opacity-90"
+                                />
+                            </div>
+                            <p className="text-xs text-center text-slate-400 max-w-[200px]">
+                                Open your <span className="font-bold text-slate-900">Straight Wallet</span> app and scan this code to pay instantly.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Card Tab */}
+                    {activeTab === 'CARD' && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Card Number</label>
+                                <div className="relative mt-1">
+                                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="0000 0000 0000 0000"
+                                        maxLength={19}
+                                        value={cardDetails.number}
+                                        onChange={(e) => setCardDetails({ ...cardDetails, number: e.target.value })}
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 placeholder:text-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Expiry</label>
+                                    <input
+                                        type="text"
+                                        placeholder="MM/YY"
+                                        maxLength={5}
+                                        value={cardDetails.expiry}
+                                        onChange={(e) => setCardDetails({ ...cardDetails, expiry: e.target.value })}
+                                        className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 placeholder:text-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">CVV</label>
+                                    <div className="relative mt-1">
+                                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            placeholder="123"
+                                            maxLength={4}
+                                            value={cardDetails.cvv}
+                                            onChange={(e) => setCardDetails({ ...cardDetails, cvv: e.target.value })}
+                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 placeholder:text-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleCardPayment}
+                                disabled={processing}
+                                className="w-full py-4 mt-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
+                            >
+                                {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : `Pay $${transaction?.amount?.toFixed(2)}`}
+                            </button>
+                        </div>
+                    )}
 
                     {/* Footer */}
-                    <div className="text-center">
+                    <div className="text-center mt-8">
                         <p className="text-xs text-slate-400 flex items-center justify-center gap-1">
                             <ShieldCheck className="w-3 h-3" />
-                            256-bit SSL Encrypted Payment
+                            Use your Straight Wallet for 1% cashback
                         </p>
                     </div>
-                </div>
-
-                {/* Progress bar */}
-                <div className="h-1 bg-slate-100 w-full">
-                    <div
-                        className="h-full bg-slate-900 transition-all duration-1000 ease-linear"
-                        style={{ width: `${(timeLeft / 300) * 100}%` }}
-                    />
                 </div>
             </div>
         </div>
