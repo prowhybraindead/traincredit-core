@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
-import { clientDb } from '@/lib/firebaseClient';
+import { auth, clientDb } from '@/lib/firebaseClient'; // Added auth
+import { signOut } from 'firebase/auth'; // Added signOut
+import { useRouter } from 'next/navigation'; // Added useRouter
 import PlanSelector from '../../components/PlanSelector';
 import { PlanType } from '../../src/config/plans';
 import {
@@ -10,11 +12,12 @@ import {
 } from 'recharts';
 import {
     Activity, Users, DollarSign, CreditCard,
-    ArrowUpRight, ArrowDownRight, Search, Bell, Zap
+    ArrowUpRight, ArrowDownRight, Search, Bell, Zap, LogOut // Added LogOut
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function Dashboard() {
+    const router = useRouter(); // Init router
     const [transactions, setTransactions] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
     const [stats, setStats] = useState({
         totalVolume: 0,
@@ -25,9 +28,18 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [showPlans, setShowPlans] = useState(false);
     const [currentPlan, setCurrentPlan] = useState<PlanType>('FREE');
-    const merchantId = 'demo_merchant_1'; // Simulated logged-in merchant
+
+    // Use real merchant ID if available, else fallback safely (layout protects this view anyway)
+    const merchantId = auth.currentUser?.uid || 'demo_merchant_1';
+
+    const handleSignOut = async () => {
+        await signOut(auth);
+        router.push('/login');
+    };
 
     useEffect(() => {
+        if (!auth.currentUser) return; // Wait for auth
+
         // Fetch/Init Merchant Profile
         const fetchProfile = async () => {
             const ref = doc(clientDb, 'merchants', merchantId);
@@ -35,19 +47,17 @@ export default function Dashboard() {
             if (snap.exists()) {
                 setCurrentPlan(snap.data().currentPlan as PlanType || 'FREE');
             } else {
-                // Init demo merchant
-                await setDoc(ref, {
-                    email: 'merchant@traincredit.com',
-                    currentPlan: 'FREE',
-                    createdAt: new Date()
-                });
+                // Should be created at register, but fallback just in case
+                console.warn("Merchant profile not found, init default");
             }
         };
         fetchProfile();
-    }, []);
+    }, [merchantId]);
 
     useEffect(() => {
         // Real-time listener for recent transactions
+        // Filter by merchantId ideally, but for now we show global or all?
+        // In a real app we'd filter: where('merchantId', '==', merchantId)
         const q = query(
             collection(clientDb, 'transactions'),
             orderBy('createdAt', 'desc'),
@@ -112,6 +122,14 @@ export default function Dashboard() {
                             {item}
                         </button>
                     ))}
+
+                    {/* Sidebar Sign Out */}
+                    <button
+                        onClick={handleSignOut}
+                        className="w-full text-left px-4 py-3 rounded-xl transition-all text-slate-400 hover:text-red-400 hover:bg-white/5 mt-10 flex items-center gap-2"
+                    >
+                        <LogOut className="w-4 h-4" /> Sign Out
+                    </button>
                 </nav>
             </aside>
 
@@ -144,7 +162,9 @@ export default function Dashboard() {
                             <Bell className="w-5 h-5 text-slate-500" />
                             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
                         </button>
-                        <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full" />
+
+                        {/* Header Avatar / Sign Out */}
+                        <button onClick={handleSignOut} title="Sign Out" className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full hover:ring-2 hover:ring-slate-200 transition-all" />
                     </div>
                 </header>
 
@@ -279,7 +299,31 @@ export default function Dashboard() {
                                             {tx.description || 'Payment'}
                                         </td>
                                         <td className="px-6 py-4 text-sm text-slate-500 font-mono">
-                                            {tx.createdAt ? formatDistanceToNow(new Date(tx.createdAt), { addSuffix: true }) : 'Just now'}
+                                            {(() => {
+                                                try {
+                                                    const dateVal = tx.createdAt;
+                                                    let dateObj = new Date();
+                                                    if (dateVal) {
+                                                        // Handle Firestore Timestamp
+                                                        if (typeof dateVal.toDate === 'function') {
+                                                            dateObj = dateVal.toDate();
+                                                        }
+                                                        // Handle ISO String
+                                                        else if (typeof dateVal === 'string') {
+                                                            dateObj = new Date(dateVal);
+                                                        }
+                                                        // Handle Date Object
+                                                        else if (dateVal instanceof Date) {
+                                                            dateObj = dateVal;
+                                                        }
+                                                    }
+
+                                                    if (isNaN(dateObj.getTime())) return 'N/A';
+                                                    return formatDistanceToNow(dateObj, { addSuffix: true });
+                                                } catch (e) {
+                                                    return 'N/A';
+                                                }
+                                            })()}
                                         </td>
                                         <td className="px-6 py-4 text-xs font-mono text-slate-400">
                                             {tx.id.slice(0, 8)}...
