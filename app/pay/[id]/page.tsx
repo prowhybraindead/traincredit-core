@@ -4,17 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { clientDb } from '@/lib/firebaseClient';
-import { processPayment } from '../actions'; // Import Server Action
-import { Loader2, CheckCircle, XCircle, ShieldCheck, Clock, QrCode, CreditCard, Lock } from 'lucide-react';
-import { toast } from 'sonner';
+import { Loader2, CheckCircle, XCircle, ShieldCheck, Clock, QrCode } from 'lucide-react';
 import Image from 'next/image';
-
-interface Transaction {
-    amount: number;
-    description: string;
-    status: 'pending' | 'completed' | 'failed' | 'expired';
-    type?: string;
-}
+import { Transaction } from '@/types'; // Use new shared types
 
 export default function PaymentPage() {
     const { id } = useParams() as { id: string };
@@ -22,89 +14,50 @@ export default function PaymentPage() {
     const [transaction, setTransaction] = useState<Transaction | null>(null);
     const [loading, setLoading] = useState(true);
     const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
-    const [status, setStatus] = useState<'pending' | 'completed' | 'failed' | 'expired'>('pending');
 
-    // Payment UI State
-    const [activeTab, setActiveTab] = useState<'QR' | 'CARD'>('QR');
-    const [cardDetails, setCardDetails] = useState({ number: '', expiry: '', cvv: '' });
-    const [processing, setProcessing] = useState(false);
-
-    // PIN State
-    const [pin, setPin] = useState('');
-    const [showPinModal, setShowPinModal] = useState(false);
+    // UI State - No more Tabs/Card Input
+    const [status, setStatus] = useState<'PENDING' | 'COMPLETED' | 'FAILED' | 'EXPIRED'>('PENDING');
 
     useEffect(() => {
         if (!id) return;
+
+        // PASSIVE LISTENER: Wait for Wallet to complete transaction
         const unsub = onSnapshot(doc(clientDb, 'transactions', id), (docFn) => {
             if (docFn.exists()) {
                 const data = docFn.data() as Transaction;
                 setTransaction(data);
                 setStatus(data.status);
                 setLoading(false);
+
+                // Auto-Redirect on Success
+                if (data.status === 'COMPLETED') {
+                    // small delay for UI feedback
+                    setTimeout(() => router.push('/dashboard'), 2000);
+                }
             } else {
-                setStatus('failed');
+                setStatus('FAILED');
                 setLoading(false);
             }
         });
         return () => unsub();
-    }, [id]);
+    }, [id, router]);
 
     useEffect(() => {
-        if (status !== 'pending') return;
+        if (status !== 'PENDING') return;
         const timer = setInterval(() => {
             setTimeLeft((prev) => {
-                if (prev <= 1) return 0; // Handle expiry logic elsewhere if needed
+                if (prev <= 1) return 0;
                 return prev - 1;
             });
         }, 1000);
         return () => clearInterval(timer);
     }, [status]);
 
-    const handleCardPayment = async () => {
-        if (!cardDetails.number || !cardDetails.expiry || !cardDetails.cvv) {
-            toast.error("Please fill in all card details");
-            return;
-        }
-        setShowPinModal(true);
-    };
-
-    const confirmPayment = async () => {
-        if (!pin || pin.length !== 6) {
-            toast.error("Please enter a valid 6-digit PIN");
-            return;
-        }
-
-        setProcessing(true);
-        try {
-            // Use Server Action instead of API Route
-            // pass expiry, cvv, pin
-            const result = await processPayment(id, cardDetails.number.replace(/\s/g, ''), cardDetails.expiry, cardDetails.cvv, pin);
-
-            if (result.success) {
-                toast.success("Payment Successful!");
-                setShowPinModal(false);
-                setPin('');
-                // Let the snapshot listener handle the UI update to "completed"
-                // But we can also force it if snapshot is slow
-            } else {
-                // FIX: Do NOT close the modal. Just show error and clear PIN.
-                toast.error(result.error || "Payment failed");
-                setPin('');
-            }
-        } catch (error) {
-            console.error(error);
-            toast.error("Payment failed: " + (error instanceof Error ? error.message : "Unknown error"));
-            setPin(''); // Do NOT close modal
-        } finally {
-            setProcessing(false);
-        }
-    };
-
+    // STRICT QR GENERATION
     const qrPayload = transaction ? JSON.stringify({
         type: 'PAYMENT',
         trId: id,
-        amount: transaction.amount,
-        merchantName: transaction.type === 'SUBSCRIPTION_FEE' ? 'TrainCredit Inc.' : 'Merchant'
+        merchantName: transaction.merchantName || 'Merchant'
     }) : '';
 
     const formatTime = (seconds: number) => {
@@ -119,39 +72,19 @@ export default function PaymentPage() {
         </div>
     );
 
-
-
-    // ... (inside component)
-
-    if (status === 'completed') return (
+    if (status === 'COMPLETED') return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-emerald-50 p-6">
             <div className="bg-white p-8 rounded-3xl shadow-xl text-center max-w-md w-full animate-in zoom-in duration-300">
                 <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
                     <CheckCircle className="w-10 h-10 text-emerald-500" />
                 </div>
                 <h1 className="text-2xl font-black text-slate-900 mb-2">Payment Successful!</h1>
-                <p className="text-slate-500 mb-6">Your transaction has been processed securely.</p>
-                <div className="bg-slate-50 rounded-xl p-4 mb-6 text-sm">
-                    <div className="flex justify-between mb-2">
-                        <span className="text-slate-500">Amount Paid</span>
-                        <span className="font-bold text-slate-900">${transaction?.amount?.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-slate-500">Transaction ID</span>
-                        <span className="font-mono text-xs text-slate-700">{id.slice(0, 8)}...</span>
-                    </div>
-                </div>
-                <button
-                    onClick={() => router.push('/dashboard')}
-                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-500/20"
-                >
-                    Return to Dashboard
-                </button>
+                <p className="text-slate-500 mb-6">Redirecting you to dashboard...</p>
             </div>
         </div>
     );
 
-    if (status === 'failed' || status === 'expired') return (
+    if (status === 'FAILED' || status === 'EXPIRED') return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-red-50/50 p-6">
             <div className="text-center">
                 <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
@@ -163,49 +96,6 @@ export default function PaymentPage() {
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative">
-            {/* PIN MODAL */}
-            {showPinModal && (
-                <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm animate-in zoom-in-95">
-                        <div className="text-center mb-6">
-                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <Lock className="w-6 h-6 text-slate-900" />
-                            </div>
-                            <h2 className="text-lg font-bold text-slate-900">Enter Security PIN</h2>
-                            <p className="text-sm text-slate-500">Please enter your 6-digit wallet PIN to authorize this payment.</p>
-                        </div>
-
-                        <div className="flex justify-center mb-6">
-                            <input
-                                type="password"
-                                maxLength={6}
-                                value={pin}
-                                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                                className="w-full text-center text-3xl font-mono tracking-[0.5em] py-3 border-b-2 border-slate-200 focus:border-slate-900 outline-none bg-transparent transition-all"
-                                placeholder="••••••"
-                                autoFocus
-                            />
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => { setShowPinModal(false); setPin(''); }}
-                                className="flex-1 py-3 bg-slate-100 font-bold rounded-xl text-slate-600 hover:bg-slate-200 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmPayment}
-                                disabled={processing || pin.length !== 6}
-                                className="flex-1 py-3 bg-slate-900 font-bold rounded-xl text-white hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
-                            >
-                                {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirm'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
                 {/* Header */}
                 <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
@@ -227,103 +117,32 @@ export default function PaymentPage() {
                         <p className="text-sm text-slate-500 mt-2">{transaction?.description}</p>
                     </div>
 
-                    {/* Tabs */}
-                    <div className="flex p-1 bg-slate-100 rounded-xl mb-8">
-                        <button
-                            onClick={() => setActiveTab('QR')}
-                            className={`flex-1 py-2 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'QR' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
-                                }`}
-                        >
-                            <QrCode className="w-4 h-4" /> Scan QR
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('CARD')}
-                            className={`flex-1 py-2 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'CARD' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
-                                }`}
-                        >
-                            <CreditCard className="w-4 h-4" /> Pay with Card
-                        </button>
+                    {/* Passive QR Display */}
+                    <div className="bg-white border-2 border-slate-100 rounded-2xl p-6 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2">
+                        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm mb-4">
+                            <Image
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrPayload)}`}
+                                alt="Payment QR"
+                                width={240}
+                                height={240}
+                                className="w-60 h-60 opacity-90"
+                                unoptimized
+                            />
+                        </div>
+                        <p className="text-sm text-center text-slate-500 max-w-[200px] mb-2">
+                            Scan with <span className="font-bold text-slate-900">Straight Wallet</span>
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-emerald-600 font-bold bg-emerald-50 px-3 py-1 rounded-full animate-pulse">
+                            <QrCode className="w-3 h-3" />
+                            Waiting for scan...
+                        </div>
                     </div>
-
-                    {/* QR Code Tab */}
-                    {activeTab === 'QR' && (
-                        <div className="bg-white border-2 border-slate-100 rounded-2xl p-6 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2">
-                            <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm mb-4">
-                                <Image
-                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrPayload)}`}
-                                    alt="Payment QR"
-                                    width={192}
-                                    height={192}
-                                    className="w-48 h-48 opacity-90"
-                                    unoptimized
-                                />
-                            </div>
-                            <p className="text-xs text-center text-slate-400 max-w-[200px]">
-                                Open your <span className="font-bold text-slate-900">Straight Wallet</span> app and scan this code to pay instantly.
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Card Tab */}
-                    {activeTab === 'CARD' && (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Card Number</label>
-                                <div className="relative mt-1">
-                                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="0000 0000 0000 0000"
-                                        maxLength={19}
-                                        value={cardDetails.number}
-                                        onChange={(e) => setCardDetails({ ...cardDetails, number: e.target.value })}
-                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 placeholder:text-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Expiry</label>
-                                    <input
-                                        type="text"
-                                        placeholder="MM/YY"
-                                        maxLength={5}
-                                        value={cardDetails.expiry}
-                                        onChange={(e) => setCardDetails({ ...cardDetails, expiry: e.target.value })}
-                                        className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 placeholder:text-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">CVV</label>
-                                    <div className="relative mt-1">
-                                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                        <input
-                                            type="text"
-                                            placeholder="123"
-                                            maxLength={4}
-                                            value={cardDetails.cvv}
-                                            onChange={(e) => setCardDetails({ ...cardDetails, cvv: e.target.value })}
-                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 placeholder:text-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleCardPayment}
-                                disabled={processing}
-                                className="w-full py-4 mt-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
-                            >
-                                {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : `Pay $${transaction?.amount?.toFixed(2)}`}
-                            </button>
-                        </div>
-                    )}
 
                     {/* Footer */}
                     <div className="text-center mt-8">
                         <p className="text-xs text-slate-400 flex items-center justify-center gap-1">
                             <ShieldCheck className="w-3 h-3" />
-                            Use your Straight Wallet for 1% cashback
+                            Secure Firestore-Driven Transaction
                         </p>
                     </div>
                 </div>
