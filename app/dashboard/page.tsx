@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, where } from 'firebase/firestore';
-import { auth, clientDb } from '@/lib/firebaseClient'; // Added auth
-import { signOut } from 'firebase/auth'; // Added signOut
-import { useRouter } from 'next/navigation'; // Added useRouter
+import { auth, clientDb } from '@/lib/firebaseClient';
+import { signOut } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
 import PlanSelector from '../../components/PlanSelector';
 import { PlanType } from '../../src/config/plans';
 import {
@@ -12,12 +12,12 @@ import {
 } from 'recharts';
 import {
     Activity, Users, DollarSign, CreditCard,
-    ArrowUpRight, ArrowDownRight, Search, Bell, Zap, LogOut // Added LogOut
+    ArrowUpRight, ArrowDownRight, Search, Bell, Zap, LogOut
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function Dashboard() {
-    const router = useRouter(); // Init router
+    const router = useRouter();
     const [transactions, setTransactions] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
     const [stats, setStats] = useState({
         totalVolume: 0,
@@ -25,11 +25,12 @@ export default function Dashboard() {
         successRate: 98.4,
         avgLatency: 45
     });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [loading, setLoading] = useState(true);
     const [showPlans, setShowPlans] = useState(false);
     const [currentPlan, setCurrentPlan] = useState<PlanType>('FREE');
 
-    // Use real merchant ID if available, else fallback safely (layout protects this view anyway)
+    // Use real merchant ID if available, else fallback safely
     const merchantId = auth.currentUser?.uid || 'demo_merchant_1';
 
     const handleSignOut = async () => {
@@ -38,18 +39,17 @@ export default function Dashboard() {
     };
 
     useEffect(() => {
-        if (!auth.currentUser) return; // Wait for auth
+        if (!auth.currentUser) return;
 
-        // Fetch/Init Merchant Profile
         const fetchProfile = async () => {
             const ref = doc(clientDb, 'merchants', merchantId);
             const snap = await getDoc(ref);
             if (snap.exists()) {
                 setCurrentPlan(snap.data().currentPlan as PlanType || 'FREE');
             } else {
-                // Should be created at register, but fallback just in case
                 console.warn("Merchant profile not found, init default");
             }
+            setLoading(false);
         };
         fetchProfile();
     }, [merchantId]);
@@ -68,13 +68,13 @@ export default function Dashboard() {
         const unsubRecent = onSnapshot(qRecent, (snapshot) => {
             const txs = snapshot.docs.map(doc => ({
                 id: doc.id,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 ...(doc.data() as any)
             }));
             setTransactions(txs);
         });
 
         // 2. Analytics Data (Last 1000 completed for stats/charts)
-        // In a real app, use Server-Side Aggregation
         const qStats = query(
             collection(clientDb, 'transactions'),
             where('merchantId', '==', merchantId),
@@ -91,6 +91,7 @@ export default function Dashboard() {
             const successCount = docs.length;
 
             // Calc Chart Data (Group by Hour)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const grouped = docs.reduce((acc: any, curr: any) => {
                 try {
                     const date = curr.createdAt?.toDate ? curr.createdAt.toDate() : new Date(curr.createdAt);
@@ -105,17 +106,13 @@ export default function Dashboard() {
                 value: grouped[k]
             })).sort((a, b) => parseInt(a.name) - parseInt(b.name));
 
-            // Fill missing hours if needed, or just show what we have
-            // For demo, let's keep it simple
-
             setStats(prev => ({
                 ...prev,
                 totalVolume: totalVol,
-                activeUsers: successCount, // Using sales count as proxy for now
-                successRate: 100 // Since we filter by completed
+                activeUsers: successCount, // Using sales count as proxy
+                successRate: 100
             }));
 
-            // Update chart if we have data, else keep default empty or specific empty state
             if (newChartData.length > 0) {
                 setChartData(newChartData);
             }

@@ -5,7 +5,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, clientDb } from '@/lib/firebaseClient';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, Save, ArrowLeft, Key, Globe, Store, User } from 'lucide-react';
+import { Loader2, Save, ArrowLeft, Key, Globe, Store } from 'lucide-react';
 
 export default function SettingsPage() {
     const router = useRouter();
@@ -49,6 +49,7 @@ export default function SettingsPage() {
                 webhookUrl: webhookUrl
             });
             toast.success("Settings Saved!");
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             toast.error(error.message);
         } finally {
