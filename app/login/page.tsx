@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, clientDb } from '@/lib/firebaseClient';
-import { Loader2, Store, Mail, Lock, ArrowRight, AlertTriangle } from 'lucide-react';
+import { Loader2, Store, Mail, Lock, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
@@ -38,6 +38,7 @@ export default function LoginPage() {
             toast.success("Welcome back!");
             router.push('/dashboard');
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             console.error(error);
             toast.error(error.message || "Login Failed");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { auth, clientDb } from '@/lib/firebaseClient'; // Added auth
 import { signOut } from 'firebase/auth'; // Added signOut
 import { useRouter } from 'next/navigation'; // Added useRouter
@@ -320,7 +320,7 @@ export default function Dashboard() {
 
                                                     if (isNaN(dateObj.getTime())) return 'N/A';
                                                     return formatDistanceToNow(dateObj, { addSuffix: true });
-                                                } catch (e) {
+                                                } catch {
                                                     return 'N/A';
                                                 }
                                             })()}

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, clientDb } from '@/lib/firebaseClient';
-import { Loader2, AlertCircle, CheckCircle, Store, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Loader2, Store, Mail, Lock, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function RegisterPage() {
@@ -65,6 +65,7 @@ export default function RegisterPage() {
             toast.success("Merchant Account Created!");
             router.push('/dashboard');
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             console.error(error);
             toast.error(error.message || "Registration Failed");
