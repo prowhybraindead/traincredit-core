@@ -1,19 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db as adminDb } from '@/lib/firebaseAdmin';
 
-// CRITICAL: CORS Headers for Wallet Access
-function corsHeaders() {
-    return {
-        'Access-Control-Allow-Origin': '*', // In production, replace * with Wallet Domain
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-    };
-}
-
-// 1. HANDLE PREFLIGHT REQUESTS (The "Knock" before entering)
-export async function OPTIONS() {
-    return NextResponse.json({}, { headers: corsHeaders() });
-}
+// Note: CORS is now handled globally in next.config.mjs
 
 export async function POST(request: Request) {
     try {
@@ -23,13 +11,13 @@ export async function POST(request: Request) {
         if (!transactionId || !cardNumber) {
             return NextResponse.json(
                 { error: 'Invalid Payment Data' },
-                { status: 400, headers: corsHeaders() }
+                { status: 400 }
             );
         }
         if (!pin || pin.length !== 6) {
             return NextResponse.json(
                 { error: '6-digit PIN is required' },
-                { status: 400, headers: corsHeaders() }
+                { status: 400 }
             );
         }
 
@@ -40,7 +28,7 @@ export async function POST(request: Request) {
         if (!txSnap.exists) {
             return NextResponse.json(
                 { error: 'Transaction not found' },
-                { status: 404, headers: corsHeaders() }
+                { status: 404 }
             );
         }
 
@@ -48,7 +36,7 @@ export async function POST(request: Request) {
         if (txData?.status === 'completed') {
             return NextResponse.json(
                 { error: 'Transaction already completed' },
-                { status: 400, headers: corsHeaders() }
+                { status: 400 }
             );
         }
 
@@ -75,7 +63,7 @@ export async function POST(request: Request) {
         if (!payerRef || !payerData) {
             return NextResponse.json(
                 { error: 'Invalid Card Number' },
-                { status: 400, headers: corsHeaders() }
+                { status: 400 }
             );
         }
 
@@ -83,7 +71,7 @@ export async function POST(request: Request) {
         if (payerData.pin !== pin) {
             return NextResponse.json(
                 { error: 'Invalid Security PIN' },
-                { status: 403, headers: corsHeaders() }
+                { status: 403 }
             );
         }
 
@@ -123,7 +111,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json(
             { success: true, message: 'Payment Processed' },
-            { status: 200, headers: corsHeaders() }
+            { status: 200 }
         );
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,7 +119,7 @@ export async function POST(request: Request) {
         console.error('Payment processing error:', error);
         return NextResponse.json(
             { error: error.message || 'Payment Failed' },
-            { status: 500, headers: corsHeaders() }
+            { status: 500 }
         );
     }
 }
