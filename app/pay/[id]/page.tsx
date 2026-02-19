@@ -6,6 +6,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { clientDb } from '@/lib/firebaseClient';
 import { Loader2, CheckCircle, XCircle, ShieldCheck, Clock, QrCode, CreditCard, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 export default function PaymentPage() {
     const { id } = useParams() as { id: string };
@@ -70,6 +71,7 @@ export default function PaymentPage() {
 
             toast.success("Payment Successful!");
             // Status will update via Firestore listener
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             console.error(error);
             toast.error(error.message);
@@ -180,10 +182,13 @@ export default function PaymentPage() {
                     {activeTab === 'QR' && (
                         <div className="bg-white border-2 border-slate-100 rounded-2xl p-6 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2">
                             <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm mb-4">
-                                <img
+                                <Image
                                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrPayload)}`}
                                     alt="Payment QR"
+                                    width={192}
+                                    height={192}
                                     className="w-48 h-48 opacity-90"
+                                    unoptimized
                                 />
                             </div>
                             <p className="text-xs text-center text-slate-400 max-w-[200px]">

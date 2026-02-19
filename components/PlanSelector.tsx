@@ -63,7 +63,6 @@ export default function PlanSelector({ currentPlanId = 'FREE', merchantId, onClo
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {Object.values(PLANS).map((plan: PlanConfig) => {
                         const isCurrent = plan.id === currentPlanId;
-                        const isFree = plan.price === 0;
 
                         return (
                             <div

@@ -3,7 +3,7 @@ import { db as adminDb } from '@/lib/firebaseAdmin';
 
 export async function POST(request: Request) {
     try {
-        const { transactionId, cardNumber, expiry, cvv } = await request.json();
+        const { transactionId, cardNumber, expiry: _expiry, cvv: _cvv } = await request.json();
 
         // 1. Validate Input (Basic)
         if (!transactionId || !cardNumber || cardNumber.length < 15) {
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
         for (const doc of usersSnap.docs) {
             const data = doc.data();
             if (data.cards && Array.isArray(data.cards)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const card = data.cards.find((c: any) => c.number === cardNumber);
                 if (card) {
                     payerRef = doc.ref;
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ success: true });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
         console.error('Payment processing error:', error);
         return NextResponse.json({ error: error.message || 'Payment Failed' }, { status: 500 });
