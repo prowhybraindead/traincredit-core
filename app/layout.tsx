@@ -1,3 +1,4 @@
+import { Toaster } from 'sonner';
 import './globals.css';
 
 export const metadata = {
@@ -12,7 +13,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="antialiased font-sans">{children}</body>
+      <body className="antialiased font-sans">
+        {children}
+        <Toaster position="top-center" richColors />
+      </body>
     </html>
   );
 }

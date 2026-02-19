@@ -87,15 +87,14 @@ export default function PaymentPage() {
                 // Let the snapshot listener handle the UI update to "completed"
                 // But we can also force it if snapshot is slow
             } else {
-                toast.error(result.error);
-                setShowPinModal(false);
+                // FIX: Do NOT close the modal. Just show error and clear PIN.
+                toast.error(result.error || "Payment failed");
                 setPin('');
             }
         } catch (error) {
             console.error(error);
             toast.error("Payment failed: " + (error instanceof Error ? error.message : "Unknown error"));
-            setShowPinModal(false);
-            setPin('');
+            setPin(''); // Do NOT close modal
         } finally {
             setProcessing(false);
         }

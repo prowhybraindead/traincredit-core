@@ -95,9 +95,9 @@ export async function processPayment(
 
             const card = userData.cards[cardIndex];
 
-            // Validate CVV & Expiry
-            if (card.cvv !== cvv) throw new Error("Invalid CVV");
-            if (card.expiry !== expiry) throw new Error("Invalid Expiry Date");
+            // Validate CVV & Expiry (Allow BYPASS for Wallet/QR flow)
+            if (cvv !== "BYPASS" && card.cvv !== cvv) throw new Error("Invalid CVV");
+            if (expiry !== "BYPASS" && card.expiry !== expiry) throw new Error("Invalid Expiry Date");
 
             const cardBalance = card.balance || 0;
 

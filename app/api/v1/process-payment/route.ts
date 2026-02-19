@@ -1,125 +1,33 @@
 import { NextResponse } from 'next/server';
-import { db as adminDb } from '@/lib/firebaseAdmin';
+import { processPayment } from '@/app/pay/actions';
 
-// Note: CORS is now handled globally in next.config.mjs
+export async function OPTIONS() {
+    return NextResponse.json({}, {
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        }
+    });
+}
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
     try {
-        const { transactionId, cardNumber, pin } = await request.json();
+        const body = await req.json();
+        const { transactionId, cardNumber, pin } = body;
 
-        // 1. Validate Input
-        if (!transactionId || !cardNumber) {
-            return NextResponse.json(
-                { error: 'Invalid Payment Data' },
-                { status: 400 }
-            );
-        }
-        if (!pin || pin.length !== 6) {
-            return NextResponse.json(
-                { error: '6-digit PIN is required' },
-                { status: 400 }
-            );
+        if (!transactionId || !cardNumber || !pin) {
+            return NextResponse.json({ success: false, error: "Missing payload data from Wallet" }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // 2. Fetch Transaction
-        const txRef = adminDb.collection('transactions').doc(transactionId);
-        const txSnap = await txRef.get();
+        // Pass "BYPASS" for expiry and cvv since Wallet QR flow uses PIN for auth
+        const result = await processPayment(transactionId, cardNumber, "BYPASS", "BYPASS", pin);
 
-        if (!txSnap.exists) {
-            return NextResponse.json(
-                { error: 'Transaction not found' },
-                { status: 404 }
-            );
+        if (!result.success) {
+            return NextResponse.json({ success: false, error: result.error }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
-
-        const txData = txSnap.data();
-        if (txData?.status === 'completed') {
-            return NextResponse.json(
-                { error: 'Transaction already completed' },
-                { status: 400 }
-            );
-        }
-
-        const amount = txData?.amount || 0;
-
-        // 3. Find Payer User (Scan Users Collection via Admin SDK)
-        const usersSnap = await adminDb.collection('users').get();
-        let payerRef = null;
-        let payerData = null;
-
-        for (const doc of usersSnap.docs) {
-            const data = doc.data();
-            if (data.cards && Array.isArray(data.cards)) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const card = data.cards.find((c: any) => c.number === cardNumber);
-                if (card) {
-                    payerRef = doc.ref;
-                    payerData = data;
-                    break;
-                }
-            }
-        }
-
-        if (!payerRef || !payerData) {
-            return NextResponse.json(
-                { error: 'Invalid Card Number' },
-                { status: 400 }
-            );
-        }
-
-        // 4. Verify PIN
-        if (payerData.pin !== pin) {
-            return NextResponse.json(
-                { error: 'Invalid Security PIN' },
-                { status: 403 }
-            );
-        }
-
-        // 5. Run Transaction (ACID)
-        await adminDb.runTransaction(async (t) => {
-            const currentPayerDoc = await t.get(payerRef!);
-            if (!currentPayerDoc.exists) throw new Error("Payer not found");
-
-            const currentBalance = currentPayerDoc.data()?.balance || 0;
-            if (currentBalance < amount) {
-                throw new Error("Insufficient Funds");
-            }
-
-            // Deduct
-            t.update(payerRef!, {
-                balance: currentBalance - amount
-            });
-
-            // Mark Transaction
-            t.update(txRef, {
-                status: 'completed',
-                paymentMethod: 'CARD',
-                processedAt: new Date().toISOString()
-            });
-
-            // Handle Subscription Logic if needed
-            if (txData?.type === 'SUBSCRIPTION_FEE' && txData.merchantId) {
-                const merchantRef = adminDb.collection('merchants').doc(txData.merchantId);
-                t.update(merchantRef, {
-                    currentPlan: txData.planId,
-                    subscriptionStatus: 'ACTIVE',
-                    billingCycle: 'MONTHLY',
-                    lastBillingDate: new Date().toISOString()
-                });
-            }
-        });
-
-        return NextResponse.json(
-            { success: true, message: 'Payment Processed' },
-            { status: 200 }
-        );
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return NextResponse.json(result, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
     } catch (error: any) {
-        console.error('Payment processing error:', error);
-        return NextResponse.json(
-            { error: error.message || 'Payment Failed' },
-            { status: 500 }
-        );
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 }
