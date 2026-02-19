@@ -3,11 +3,14 @@ import { db as adminDb } from '@/lib/firebaseAdmin';
 
 export async function POST(request: Request) {
     try {
-        const { transactionId, cardNumber } = await request.json();
+        const { transactionId, cardNumber, pin } = await request.json();
 
-        // 1. Validate Input (Basic)
+        // 1. Validate Input
         if (!transactionId || !cardNumber || cardNumber.length < 15) {
             return NextResponse.json({ error: 'Invalid Payment Data' }, { status: 400 });
+        }
+        if (!pin || pin.length !== 6) {
+            return NextResponse.json({ error: '6-digit PIN is required' }, { status: 400 });
         }
 
         // 2. Fetch Transaction
@@ -26,7 +29,6 @@ export async function POST(request: Request) {
         const amount = txData?.amount || 0;
 
         // 3. Find Payer User (Scan Users Collection via Admin SDK)
-        // Ideally: collectionGroup or index on cards.number
         const usersSnap = await adminDb.collection('users').get();
         let payerRef = null;
         let payerData = null;
@@ -48,7 +50,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid Card Number' }, { status: 400 });
         }
 
-        // 4. Run Transaction
+        // 4. Verify PIN
+        if (payerData.pin !== pin) {
+            return NextResponse.json({ error: 'Invalid Security PIN' }, { status: 403 });
+        }
+
+        // 5. Run Transaction
         await adminDb.runTransaction(async (t) => {
             const currentPayerDoc = await t.get(payerRef!);
             if (!currentPayerDoc.exists) throw new Error("Payer not found");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { clientDb } from '@/lib/firebaseClient';
 import { Loader2, CheckCircle, XCircle, ShieldCheck, Clock, QrCode, CreditCard, Lock } from 'lucide-react';
@@ -10,6 +10,7 @@ import Image from 'next/image';
 
 export default function PaymentPage() {
     const { id } = useParams() as { id: string };
+    const router = useRouter();
     const [transaction, setTransaction] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
     const [loading, setLoading] = useState(true);
     const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
@@ -19,6 +20,10 @@ export default function PaymentPage() {
     const [activeTab, setActiveTab] = useState<'QR' | 'CARD'>('QR');
     const [cardDetails, setCardDetails] = useState({ number: '', expiry: '', cvv: '' });
     const [processing, setProcessing] = useState(false);
+
+    // PIN State
+    const [pin, setPin] = useState('');
+    const [showPinModal, setShowPinModal] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -52,6 +57,14 @@ export default function PaymentPage() {
             toast.error("Please fill in all card details");
             return;
         }
+        setShowPinModal(true);
+    };
+
+    const confirmPayment = async () => {
+        if (!pin || pin.length !== 6) {
+            toast.error("Please enter a valid 6-digit PIN");
+            return;
+        }
 
         setProcessing(true);
         try {
@@ -62,7 +75,8 @@ export default function PaymentPage() {
                     transactionId: id,
                     cardNumber: cardDetails.number.replace(/\s/g, ''),
                     expiry: cardDetails.expiry,
-                    cvv: cardDetails.cvv
+                    cvv: cardDetails.cvv,
+                    pin: pin
                 })
             });
 
@@ -70,11 +84,14 @@ export default function PaymentPage() {
             if (!res.ok) throw new Error(data.error || 'Payment Failed');
 
             toast.success("Payment Successful!");
+            setShowPinModal(false);
             // Status will update via Firestore listener
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             console.error(error);
             toast.error(error.message);
+            setShowPinModal(false);
+            setPin('');
         } finally {
             setProcessing(false);
         }
@@ -99,6 +116,10 @@ export default function PaymentPage() {
         </div>
     );
 
+
+
+    // ... (inside component)
+
     if (status === 'completed') return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-emerald-50 p-6">
             <div className="bg-white p-8 rounded-3xl shadow-xl text-center max-w-md w-full animate-in zoom-in duration-300">
@@ -118,7 +139,7 @@ export default function PaymentPage() {
                     </div>
                 </div>
                 <button
-                    onClick={() => window.close()} // Ideally redirect back to dashboard
+                    onClick={() => router.push('/dashboard')}
                     className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-500/20"
                 >
                     Return to Dashboard
@@ -138,7 +159,50 @@ export default function PaymentPage() {
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative">
+            {/* PIN MODAL */}
+            {showPinModal && (
+                <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm animate-in zoom-in-95">
+                        <div className="text-center mb-6">
+                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <Lock className="w-6 h-6 text-slate-900" />
+                            </div>
+                            <h2 className="text-lg font-bold text-slate-900">Enter Security PIN</h2>
+                            <p className="text-sm text-slate-500">Please enter your 6-digit wallet PIN to authorize this payment.</p>
+                        </div>
+
+                        <div className="flex justify-center mb-6">
+                            <input
+                                type="password"
+                                maxLength={6}
+                                value={pin}
+                                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                                className="w-full text-center text-3xl font-mono tracking-[0.5em] py-3 border-b-2 border-slate-200 focus:border-slate-900 outline-none bg-transparent transition-all"
+                                placeholder="••••••"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => { setShowPinModal(false); setPin(''); }}
+                                className="flex-1 py-3 bg-slate-100 font-bold rounded-xl text-slate-600 hover:bg-slate-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmPayment}
+                                disabled={processing || pin.length !== 6}
+                                className="flex-1 py-3 bg-slate-900 font-bold rounded-xl text-white hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
+                            >
+                                {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirm'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
                 {/* Header */}
                 <div className="bg-slate-900 p-6 text-white flex justify-between items-center">

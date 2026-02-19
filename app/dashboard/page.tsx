@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, limit, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, where } from 'firebase/firestore';
 import { auth, clientDb } from '@/lib/firebaseClient'; // Added auth
 import { signOut } from 'firebase/auth'; // Added signOut
 import { useRouter } from 'next/navigation'; // Added useRouter
@@ -55,41 +55,84 @@ export default function Dashboard() {
     }, [merchantId]);
 
     useEffect(() => {
-        // Real-time listener for recent transactions
-        // Filter by merchantId ideally, but for now we show global or all?
-        // In a real app we'd filter: where('merchantId', '==', merchantId)
-        const q = query(
+        if (!merchantId) return;
+
+        // 1. Live Feed (Recent 20)
+        const qRecent = query(
             collection(clientDb, 'transactions'),
+            where('merchantId', '==', merchantId),
             orderBy('createdAt', 'desc'),
             limit(20)
         );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const unsubRecent = onSnapshot(qRecent, (snapshot) => {
             const txs = snapshot.docs.map(doc => ({
                 id: doc.id,
-                ...(doc.data() as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+                ...(doc.data() as any)
             }));
             setTransactions(txs);
-
-            // Calculate stats from visible transactions
-            const volume = txs.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-            setStats(prev => ({ ...prev, totalVolume: volume }));
-            setLoading(false);
         });
 
-        return () => unsubscribe();
-    }, []);
+        // 2. Analytics Data (Last 1000 completed for stats/charts)
+        // In a real app, use Server-Side Aggregation
+        const qStats = query(
+            collection(clientDb, 'transactions'),
+            where('merchantId', '==', merchantId),
+            where('status', '==', 'completed'),
+            orderBy('createdAt', 'desc'),
+            limit(1000)
+        );
 
-    // Simulated chart data
-    const chartData = [
-        { name: '00:00', value: 400 },
-        { name: '04:00', value: 300 },
-        { name: '08:00', value: 1200 },
-        { name: '12:00', value: 3800 },
-        { name: '16:00', value: 5100 },
-        { name: '20:00', value: 2400 },
-        { name: '24:00', value: 1000 },
-    ];
+        const unsubStats = onSnapshot(qStats, (snapshot) => {
+            const docs = snapshot.docs.map(d => d.data());
+
+            // Calc Totals
+            const totalVol = docs.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+            const successCount = docs.length;
+
+            // Calc Chart Data (Group by Hour)
+            const grouped = docs.reduce((acc: any, curr: any) => {
+                try {
+                    const date = curr.createdAt?.toDate ? curr.createdAt.toDate() : new Date(curr.createdAt);
+                    const key = date.getHours() + ':00';
+                    acc[key] = (acc[key] || 0) + (curr.amount || 0);
+                } catch (e) { console.warn(e); }
+                return acc;
+            }, {});
+
+            const newChartData = Object.keys(grouped).map(k => ({
+                name: k,
+                value: grouped[k]
+            })).sort((a, b) => parseInt(a.name) - parseInt(b.name));
+
+            // Fill missing hours if needed, or just show what we have
+            // For demo, let's keep it simple
+
+            setStats(prev => ({
+                ...prev,
+                totalVolume: totalVol,
+                activeUsers: successCount, // Using sales count as proxy for now
+                successRate: 100 // Since we filter by completed
+            }));
+
+            // Update chart if we have data, else keep default empty or specific empty state
+            if (newChartData.length > 0) {
+                setChartData(newChartData);
+            }
+        });
+
+        return () => {
+            unsubRecent();
+            unsubStats();
+        };
+    }, [merchantId]);
+
+    const [chartData, setChartData] = useState([
+        { name: '00:00', value: 0 },
+        { name: '06:00', value: 0 },
+        { name: '12:00', value: 0 },
+        { name: '18:00', value: 0 },
+    ]);
 
     if (loading) {
         return (
@@ -114,6 +157,7 @@ export default function Dashboard() {
                     {['Overview', 'Transactions', 'Customers', 'Developers', 'Settings'].map((item, i) => (
                         <button
                             key={item}
+                            onClick={() => item === 'Settings' ? router.push('/settings') : null}
                             className={`w-full text-left px-4 py-3 rounded-xl transition-all ${i === 0
                                 ? 'bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-500/20'
                                 : 'text-slate-400 hover:text-white hover:bg-white/5'
