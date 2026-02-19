@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, where } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, where } from 'firebase/firestore';
 import { auth, clientDb } from '@/lib/firebaseClient';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
@@ -12,7 +12,7 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
-    Activity, Users, DollarSign, CreditCard,
+    Activity, Users, DollarSign,
     ArrowUpRight, ArrowDownRight, Search, Bell, Zap, LogOut,
     ShieldCheck,
     CheckCircle

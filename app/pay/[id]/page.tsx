@@ -9,10 +9,17 @@ import { Loader2, CheckCircle, XCircle, ShieldCheck, Clock, QrCode, CreditCard, 
 import { toast } from 'sonner';
 import Image from 'next/image';
 
+interface Transaction {
+    amount: number;
+    description: string;
+    status: 'pending' | 'completed' | 'failed' | 'expired';
+    type?: string;
+}
+
 export default function PaymentPage() {
     const { id } = useParams() as { id: string };
     const router = useRouter();
-    const [transaction, setTransaction] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const [transaction, setTransaction] = useState<Transaction | null>(null);
     const [loading, setLoading] = useState(true);
     const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
     const [status, setStatus] = useState<'pending' | 'completed' | 'failed' | 'expired'>('pending');
@@ -30,7 +37,7 @@ export default function PaymentPage() {
         if (!id) return;
         const unsub = onSnapshot(doc(clientDb, 'transactions', id), (docFn) => {
             if (docFn.exists()) {
-                const data = docFn.data();
+                const data = docFn.data() as Transaction;
                 setTransaction(data);
                 setStatus(data.status);
                 setLoading(false);
@@ -84,9 +91,9 @@ export default function PaymentPage() {
                 setShowPinModal(false);
                 setPin('');
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
-            toast.error("Payment failed: " + error.message);
+            toast.error("Payment failed: " + (error instanceof Error ? error.message : "Unknown error"));
             setShowPinModal(false);
             setPin('');
         } finally {

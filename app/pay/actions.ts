@@ -3,22 +3,36 @@
 import { db } from '@/lib/firebaseAdmin';
 import { FieldValue } from 'firebase-admin/firestore';
 
+interface Card {
+    number: string;
+    cvv: string;
+    expiry: string;
+    balance: number;
+}
+
+interface UserData {
+    id: string;
+    cards?: Card[];
+    pin?: string;
+    [key: string]: unknown;
+}
+
 /**
  * Helper: Find user by card number.
  * Note: In a real/scaled app, we would query a specific 'cards' collection or have an index.
  * For this demo, we iterate users (inefficient but functional for small inputs).
  */
-async function findUserByCard(cardNumber: string) {
+async function findUserByCard(cardNumber: string): Promise<{ foundUser: UserData | null; cardIndex: number }> {
     const usersSnap = await db.collection('users').get();
-    let foundUser: any = null;
+    let foundUser: UserData | null = null;
     let cardIndex = -1;
 
     usersSnap.forEach(doc => {
         const data = doc.data();
         if (data.cards && Array.isArray(data.cards)) {
-            const idx = data.cards.findIndex((c: any) => c.number === cardNumber);
+            const idx = data.cards.findIndex((c: Card) => c.number === cardNumber);
             if (idx !== -1) {
-                foundUser = { id: doc.id, ...data };
+                foundUser = { id: doc.id, ...data } as UserData;
                 cardIndex = idx;
             }
         }
@@ -121,8 +135,8 @@ export async function processPayment(
 
         return { success: true };
 
-    } catch (error: any) {
+    } catch (error) {
         console.error("Payment Error:", error);
-        return { success: false, error: error.message || "Payment Process Failed" };
+        return { success: false, error: error instanceof Error ? error.message : "Payment Process Failed" };
     }
 }
