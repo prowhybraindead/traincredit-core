@@ -5,6 +5,7 @@ import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, where } fro
 import { auth, clientDb } from '@/lib/firebaseClient';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import DashboardSkeleton from '../../components/DashboardSkeleton'; // Import Skeleton
 import PlanSelector from '../../components/PlanSelector';
 import { PlanType } from '../../src/config/plans';
 import {
@@ -12,7 +13,9 @@ import {
 } from 'recharts';
 import {
     Activity, Users, DollarSign, CreditCard,
-    ArrowUpRight, ArrowDownRight, Search, Bell, Zap, LogOut
+    ArrowUpRight, ArrowDownRight, Search, Bell, Zap, LogOut,
+    ShieldCheck,
+    CheckCircle
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -38,20 +41,30 @@ export default function Dashboard() {
         router.push('/login');
     };
 
+    // Real-time Merchant Profile (Balance)
     useEffect(() => {
-        if (!auth.currentUser) return;
+        if (!merchantId) return;
 
-        const fetchProfile = async () => {
-            const ref = doc(clientDb, 'merchants', merchantId);
-            const snap = await getDoc(ref);
+        console.log("Subscribing to merchant:", merchantId);
+        const ref = doc(clientDb, 'merchants', merchantId);
+
+        const unsub = onSnapshot(ref, (snap) => {
             if (snap.exists()) {
-                setCurrentPlan(snap.data().currentPlan as PlanType || 'FREE');
+                const data = snap.data();
+                setCurrentPlan(data.currentPlan as PlanType || 'FREE');
+                // Calculate total revenue from balance if available, or just rely on transaction sum
+                // But user requested "Instant update", so assumes balance is on merchant doc.
+                // Our Atomic Mover updates 'balance' on merchant.
+                if (data.balance !== undefined) {
+                    setStats(prev => ({ ...prev, totalVolume: data.balance }));
+                }
             } else {
-                console.warn("Merchant profile not found, init default");
+                console.warn("Merchant profile not found");
             }
             setLoading(false);
-        };
-        fetchProfile();
+        });
+
+        return () => unsub();
     }, [merchantId]);
 
     useEffect(() => {
@@ -87,7 +100,7 @@ export default function Dashboard() {
             const docs = snapshot.docs.map(d => d.data());
 
             // Calc Totals
-            const totalVol = docs.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+            // const totalVol = docs.reduce((acc, curr) => acc + (curr.amount || 0), 0); // Removed, now from merchant.balance
             const successCount = docs.length;
 
             // Calc Chart Data (Group by Hour)
@@ -108,7 +121,7 @@ export default function Dashboard() {
 
             setStats(prev => ({
                 ...prev,
-                totalVolume: totalVol,
+                // totalVolume: totalVol, // Removed, now from merchant.balance
                 activeUsers: successCount, // Using sales count as proxy
                 successRate: 100
             }));
@@ -131,18 +144,12 @@ export default function Dashboard() {
         { name: '18:00', value: 0 },
     ]);
 
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900" />
-            </div>
-        );
-    }
+    if (loading) return <DashboardSkeleton />;
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
             {/* Sidebar */}
-            <aside className="fixed left-0 top-0 h-full w-64 bg-slate-900 text-white p-6 hidden md:block">
+            <aside className="fixed left-0 top-0 h-full w-64 bg-slate-900 text-white p-6 hidden md:block z-50">
                 <div className="flex items-center gap-2 mb-10">
                     <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
                         <Activity className="w-5 h-5 text-emerald-400" />
@@ -176,10 +183,10 @@ export default function Dashboard() {
 
             {/* Main Content */}
             <main className="md:ml-64 p-8">
-                {/* Header */}
-                <header className="flex justify-between items-center mb-10">
+                {/* Glassmorphism Header */}
+                <header className="flex justify-between items-center mb-10 bg-white/50 backdrop-blur-xl p-4 rounded-2xl border border-white/20 sticky top-4 z-40 shadow-sm">
                     <div>
-                        <h1 className="text-2xl font-bold">Dashboard</h1>
+                        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600">Dashboard</h1>
                         <p className="text-slate-500 text-sm">Real-time platform overview</p>
                     </div>
                     <div className="flex items-center gap-4">
@@ -191,19 +198,18 @@ export default function Dashboard() {
                             <span className="text-sm font-bold">Upgrade Plan</span>
                         </button>
 
-                        <div className="relative">
+                        <div className="relative hidden md:block">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <input
                                 type="text"
                                 placeholder="Search..."
-                                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none w-64"
+                                className="pl-10 pr-4 py-2 bg-white/80 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none w-64"
                             />
                         </div>
                         <button className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 relative">
                             <Bell className="w-5 h-5 text-slate-500" />
                             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
                         </button>
-
                         {/* Header Avatar / Sign Out */}
                         <button onClick={handleSignOut} title="Sign Out" className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full hover:ring-2 hover:ring-slate-200 transition-all" />
                     </div>
@@ -219,13 +225,30 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {/* Stats Grid */}
+                {/* Security Widget & Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    {/* Security Widget (New) */}
+                    <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl transform translate-x-8 -translate-y-8" />
+                        <div className="flex items-center justify-between mb-4">
+                            <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                            <span className="text-xs font-bold bg-white/10 px-2 py-1 rounded-full text-emerald-300">SECURE</span>
+                        </div>
+                        <h3 className="font-bold text-lg mb-1">Security Status</h3>
+                        <div className="space-y-2 mt-4">
+                            <div className="flex items-center gap-2 text-sm text-slate-300">
+                                <CheckCircle className="w-4 h-4 text-emerald-400" /> API Keys Active
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-slate-300">
+                                <CheckCircle className="w-4 h-4 text-emerald-400" /> Email Verified
+                            </div>
+                        </div>
+                    </div>
+
                     {[
-                        { label: 'Total Volume', value: `$${stats.totalVolume.toLocaleString()}`, icon: DollarSign, trend: '+12.5%', good: true },
-                        { label: 'Active Users', value: stats.activeUsers, icon: Users, trend: '+4.2%', good: true },
-                        { label: 'Success Rate', value: `${stats.successRate}%`, icon: Activity, trend: '-0.1%', good: false },
-                        { label: 'Avg Latency', value: `${stats.avgLatency}ms`, icon: CreditCard, trend: '-2ms', good: true },
+                        { label: 'Total Revenue', value: `$${stats.totalVolume.toLocaleString()}`, icon: DollarSign, trend: '+12.5%', good: true },
+                        { label: 'Active Sales', value: stats.activeUsers, icon: Users, trend: 'Live', good: true }, // activeUsers is basically sales count now
+                        { label: 'Avg Latency', value: `${stats.avgLatency}ms`, icon: Activity, trend: '-2ms', good: true }, // Latency placeholder
                     ].map((stat, i) => (
                         <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-4">

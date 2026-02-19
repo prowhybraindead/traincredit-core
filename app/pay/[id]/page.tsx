@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { clientDb } from '@/lib/firebaseClient';
+import { processPayment } from '../actions'; // Import Server Action
 import { Loader2, CheckCircle, XCircle, ShieldCheck, Clock, QrCode, CreditCard, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -68,28 +69,24 @@ export default function PaymentPage() {
 
         setProcessing(true);
         try {
-            const res = await fetch('/api/pay', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    transactionId: id,
-                    cardNumber: cardDetails.number.replace(/\s/g, ''),
-                    expiry: cardDetails.expiry,
-                    cvv: cardDetails.cvv,
-                    pin: pin
-                })
-            });
+            // Use Server Action instead of API Route
+            // pass expiry, cvv, pin
+            const result = await processPayment(id, cardDetails.number.replace(/\s/g, ''), cardDetails.expiry, cardDetails.cvv, pin);
 
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Payment Failed');
-
-            toast.success("Payment Successful!");
-            setShowPinModal(false);
-            // Status will update via Firestore listener
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (result.success) {
+                toast.success("Payment Successful!");
+                setShowPinModal(false);
+                setPin('');
+                // Let the snapshot listener handle the UI update to "completed"
+                // But we can also force it if snapshot is slow
+            } else {
+                toast.error(result.error);
+                setShowPinModal(false);
+                setPin('');
+            }
         } catch (error: any) {
             console.error(error);
-            toast.error(error.message);
+            toast.error("Payment failed: " + error.message);
             setShowPinModal(false);
             setPin('');
         } finally {
