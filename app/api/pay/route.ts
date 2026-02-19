@@ -3,7 +3,7 @@ import { db as adminDb } from '@/lib/firebaseAdmin';
 
 export async function POST(request: Request) {
     try {
-        const { transactionId, cardNumber, expiry: _expiry, cvv: _cvv } = await request.json();
+        const { transactionId, cardNumber } = await request.json();
 
         // 1. Validate Input (Basic)
         if (!transactionId || !cardNumber || cardNumber.length < 15) {
