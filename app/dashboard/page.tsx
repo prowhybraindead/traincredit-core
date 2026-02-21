@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { collection, query, orderBy, limit, onSnapshot, doc, where } from 'firebase/firestore';
 import { auth, clientDb } from '@/lib/firebaseClient';
 import { signOut } from 'firebase/auth';
@@ -184,7 +184,7 @@ export default function Dashboard() {
             {/* Main Content */}
             <main className="md:ml-64 p-8">
                 {/* Glassmorphism Header */}
-                <header className="flex justify-between items-center mb-10 bg-white/50 backdrop-blur-xl p-4 rounded-2xl border border-white/20 sticky top-4 z-40 shadow-sm">
+                <header className="flex justify-between items-center mb-10 bg-white/50 backdrop-blur-xl p-4 rounded-2xl border border-white/20 sticky top-4 z-40 shadow-sm" style={{ transform: 'translateZ(0)', willChange: 'filter' }}>
                     <div>
                         <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600">Dashboard</h1>
                         <p className="text-slate-500 text-sm">Real-time platform overview</p>
@@ -216,7 +216,7 @@ export default function Dashboard() {
                 </header>
 
                 {showPlans && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm" style={{ transform: 'translateZ(0)', willChange: 'filter' }}>
                         <PlanSelector
                             currentPlanId={currentPlan}
                             merchantId={merchantId}
@@ -271,24 +271,26 @@ export default function Dashboard() {
                     <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                         <h3 className="font-bold text-lg mb-6">Transaction Volume</h3>
                         <div className="h-64 w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={chartData}>
-                                    <defs>
-                                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
-                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                                    <Tooltip
-                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                        itemStyle={{ color: '#0f172a', fontWeight: 'bold' }}
-                                    />
-                                    <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
-                                </AreaChart>
-                            </ResponsiveContainer>
+                            {useMemo(() => (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={chartData}>
+                                        <defs>
+                                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                                                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            itemStyle={{ color: '#0f172a', fontWeight: 'bold' }}
+                                        />
+                                        <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            ), [chartData])}
                         </div>
                     </div>
 
